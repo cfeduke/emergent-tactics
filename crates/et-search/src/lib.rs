@@ -11,4 +11,4 @@ pub mod ismcts;
 
 pub use difficulty::Difficulty;
 pub use evaluator::{Evaluation, Evaluator, RolloutEvaluator};
-pub use ismcts::{SearchResult, SearchStats, search};
+pub use ismcts::{Candidate, SearchResult, SearchStats, search};

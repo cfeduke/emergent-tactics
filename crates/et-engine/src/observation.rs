@@ -28,7 +28,7 @@ pub struct PublicEntity {
 }
 
 impl PublicEntity {
-    fn of(e: &Entity) -> Self {
+    pub fn of(e: &Entity) -> Self {
         Self {
             archetype: e.archetype,
             lifepool: e.lifepool,

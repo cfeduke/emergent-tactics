@@ -21,4 +21,8 @@ impl Difficulty {
             Difficulty { name: "master".into(), iterations: 2000, determinizations: 50, temperature: 0.0, exploration: 1.4 },
         ]
     }
+
+    pub fn by_name(name: &str) -> Option<Difficulty> {
+        Self::presets().into_iter().find(|d| d.name == name)
+    }
 }

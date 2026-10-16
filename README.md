@@ -50,6 +50,21 @@ cd web && npm install && npm run check
 
 See the `justfile` for the full set of tasks.
 
+## Playing
+
+Run the game server and the web client in two terminals, then open
+http://localhost:5173. Vite proxies `/ws` to the server.
+
+```sh
+RUST_LOG=info cargo run -p et-server
+cd web && npm run dev
+```
+
+Pick a difficulty and seat to play against the AI, or choose two
+difficulties and watch them play. The log panel shows every AI decision:
+the candidate actions with their priors, visit counts and values, plus a
+summary of what each action changed.
+
 ## Training loop
 
 1. `just selfplay` generates samples using ISMCTS with rollout evaluation.
