@@ -3,6 +3,7 @@
 //! duplicated in Python.
 
 use et_engine::{GameState, Outcome, Player, encode};
+use et_search::{Difficulty, RolloutEvaluator, search};
 use pyo3::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -63,6 +64,20 @@ impl PyGame {
     /// Feature vector for the player to move.
     fn encode(&self) -> Vec<f32> {
         encode::encode_observation(&self.state.observe(self.state.to_move))
+    }
+
+    /// Run ISMCTS with rollout evaluation for the player to move. Returns
+    /// (chosen action index, root value, [(action index, prior, visits, value)]).
+    /// Self-play uses the visit distribution as the policy training target.
+    #[pyo3(signature = (iterations = 200, determinizations = 10, exploration = 1.4, temperature = 1.0, rollout_depth = 60))]
+    #[allow(clippy::type_complexity)]
+    fn search(&mut self, iterations: u32, determinizations: u32, exploration: f32, temperature: f32, rollout_depth: u32) -> (usize, f32, Vec<(usize, f32, u32, f32)>) {
+        let d = Difficulty { name: "py".into(), iterations, determinizations, temperature, exploration };
+        let obs = self.state.observe(self.state.to_move);
+        let legal = self.state.legal_actions();
+        let res = search(&obs, &legal, &d, &RolloutEvaluator { max_depth: rollout_depth }, &mut self.rng);
+        let cands = res.stats.candidates.iter().map(|c| (encode::action_index(&c.action), c.prior, c.visits, c.value)).collect();
+        (encode::action_index(&res.action), res.stats.root_value, cands)
     }
 
     fn observation_json(&self) -> String {

@@ -12,3 +12,6 @@ et-engine.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+rand_chacha.workspace = true
