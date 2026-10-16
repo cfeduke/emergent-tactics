@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Stop everything bin/start launched. Sends TERM, then KILL after a grace period.
+#
+#   bin/stop [--keep-logs]
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+KEEP_LOGS=0
+[[ "${1:-}" == "--keep-logs" ]] && KEEP_LOGS=1
+
+# Kill a process and its children (the web dev server spawns node workers).
+kill_tree() {
+    local pid="$1" sig="$2"
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$child" "$sig"
+    done
+    kill "-$sig" "$pid" 2>/dev/null || true
+}
+
+stopped=0
+for s in "${SERVICES[@]}"; do
+    if pid="$(alive_pid "$s")"; then
+        kill_tree "$pid" TERM
+        for _ in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.25
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            warn "$s (pid $pid) ignored TERM; killing"
+            kill_tree "$pid" KILL
+        fi
+        info "$s stopped (pid $pid)"
+        stopped=$((stopped + 1))
+    fi
+    rm -f "$(pid_file "$s")"
+done
+
+(( stopped > 0 )) || info "nothing was running"
+[[ "$KEEP_LOGS" == 1 ]] || rm -rf "$LOG_DIR"

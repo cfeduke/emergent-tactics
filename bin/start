@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Start the inference service, the game server and the web client.
+#
+#   bin/start [--model PATH] [--no-web] [--no-build] [--debug]
+#
+# Without --model the most recently modified models/*.onnx is served.
+# Ports: ET_INFERENCE_ADDR (127.0.0.1:50051), ET_SERVER_ADDR (127.0.0.1:8080),
+# ET_WEB_PORT (5173). PIDs and logs live under .run/.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+MODEL=""
+WITH_WEB=1
+BUILD=1
+PROFILE=release
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --model) MODEL="$2"; shift 2 ;;
+        --model=*) MODEL="${1#--model=}"; shift ;;
+        --no-web) WITH_WEB=0; shift ;;
+        --no-build) BUILD=0; shift ;;
+        --debug) PROFILE=debug; shift ;;
+        -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+mkdir -p "$RUN_DIR" "$LOG_DIR"
+
+for s in "${SERVICES[@]}"; do
+    if pid="$(alive_pid "$s")"; then
+        die "$s is already running (pid $pid); run bin/stop first"
+    fi
+done
+
+if [[ -z "$MODEL" ]]; then
+    MODEL="$(latest_model)" || true
+    [[ -n "$MODEL" ]] || die "no models/*.onnx found; run the training loop or pass --model"
+    info "model: $MODEL (newest in models/)"
+else
+    [[ -f "$MODEL" ]] || die "model not found: $MODEL"
+    info "model: $MODEL"
+fi
+
+if [[ "$BUILD" == 1 ]]; then
+    info "building et-inference and et-server ($PROFILE)"
+    if [[ "$PROFILE" == release ]]; then
+        (cd "$ROOT" && cargo build --release -q -p et-inference -p et-server)
+    else
+        (cd "$ROOT" && cargo build -q -p et-inference -p et-server)
+    fi
+fi
+BIN="$ROOT/target/$PROFILE"
+
+# Launch a service detached, recording its PID and log.
+launch() {
+    local name="$1"; shift
+    local log; log="$(log_file "$name")"
+    : > "$log"
+    ( cd "$ROOT" && nohup "$@" >> "$log" 2>&1 & echo $! > "$(pid_file "$name")" )
+    info "$name started (pid $(cat "$(pid_file "$name")"), log $log)"
+}
+
+# Poll a shell condition until it succeeds or the timeout passes.
+wait_for() {
+    local what="$1" cond="$2" timeout="${3:-20}"
+    local i=0
+    until eval "$cond"; do
+        sleep 0.25
+        i=$((i + 1))
+        if (( i * 4 >= timeout * 4 )); then
+            warn "$what did not become ready within ${timeout}s; see $LOG_DIR"
+            return 1
+        fi
+        if ! alive_pid "${what%% *}" >/dev/null; then
+            die "$what exited early; see $(log_file "${what%% *}")"
+        fi
+    done
+}
+
+export RUST_LOG="${RUST_LOG:-info}"
+
+launch inference "$BIN/et-inference" --model "$MODEL" --listen "$INFERENCE_ADDR"
+wait_for "inference" "grep -q 'inference service listening' '$(log_file inference)'"
+
+launch server "$BIN/et-server" --listen "$SERVER_ADDR" --inference "http://$INFERENCE_ADDR"
+wait_for "server" "curl -fsS 'http://$SERVER_ADDR/health' >/dev/null 2>&1"
+if grep -q 'does not match' "$(log_file server)"; then
+    die "server refused the model (library fingerprint mismatch); see $(log_file server)"
+fi
+if grep -q 'inference service ok' "$(log_file server)"; then
+    info "server accepted model fingerprint"
+else
+    warn "server did not confirm the inference service; net-* presets may fall back to rollouts"
+fi
+
+if [[ "$WITH_WEB" == 1 ]]; then
+    [[ -d "$ROOT/web/node_modules" ]] || (info "installing web dependencies" && cd "$ROOT/web" && npm install --silent)
+    ( cd "$ROOT/web" && nohup npm run dev -- --port "$WEB_PORT" >> "$(log_file web)" 2>&1 & echo $! > "$(pid_file web)" )
+    info "web started (pid $(cat "$(pid_file web)"), log $(log_file web))"
+    wait_for "web" "curl -fsS 'http://localhost:$WEB_PORT/' >/dev/null 2>&1" 30 || true
+    info "open http://localhost:$WEB_PORT"
+fi

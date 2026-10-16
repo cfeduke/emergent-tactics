@@ -58,7 +58,10 @@ impl Inference for Service {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stdout()))
+        .init();
     let args = Args::parse();
     let addr = args.listen.parse()?;
     let model = Arc::new(OnnxModel::load(&args.model, args.intra_threads)?);

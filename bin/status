@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Show which services are running, their endpoints, and the served model.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+for s in "${SERVICES[@]}"; do
+    if pid="$(alive_pid "$s")"; then
+        case "$s" in
+            inference)
+                model="$(sed 's/\x1b\[[0-9;]*m//g' "$(log_file inference)" 2>/dev/null | grep -o 'model=[^ ]*' | head -n 1 | cut -d= -f2)"
+                extra="grpc://$INFERENCE_ADDR  model: ${model:-?}" ;;
+            server)    extra="http://$SERVER_ADDR  ws: /ws" ;;
+            web)       extra="http://localhost:$WEB_PORT" ;;
+        esac
+        printf '%-10s running  pid %-7s %s\n' "$s" "$pid" "$extra"
+    else
+        printf '%-10s stopped\n' "$s"
+    fi
+done

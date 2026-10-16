@@ -19,3 +19,6 @@ models/*
 !models/baseline.onnx
 
 .DS_Store
+
+# bin/start runtime state
+.run/

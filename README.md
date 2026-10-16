@@ -53,13 +53,21 @@ See the `justfile` for the full set of tasks.
 
 ## Playing
 
-Run the game server and the web client in two terminals, then open
-http://localhost:5173. Vite proxies `/ws` to the server.
+`bin/start` builds the release binaries, launches the inference service
+with the most recently modified `models/*.onnx` (or `--model PATH`), the game
+server, and the web client, then waits for each to become ready. `bin/stop`
+shuts them down and `bin/status` shows what is running. PIDs and logs live
+under `.run/`.
 
 ```sh
-RUST_LOG=info cargo run -p et-server
-cd web && npm run dev
+bin/start                 # newest model, all three services
+bin/start --model models/gen1.onnx --no-web
+bin/status
+bin/stop
 ```
+
+Ports come from `ET_INFERENCE_ADDR`, `ET_SERVER_ADDR` and `ET_WEB_PORT`.
+Then open http://localhost:5173. Vite proxies `/ws` to the server.
 
 Pick a difficulty and seat to play against the AI, or choose two
 difficulties and watch them play. The log panel shows every AI decision:
