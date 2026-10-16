@@ -13,12 +13,21 @@ import type {
 	StatChange
 } from './protocol.js';
 
-/// The most recent action, shown in the play zone until the next one.
+/// One applied action, kept in the play zone for the rest of the turn.
 export interface Play {
 	id: number;
 	player: Player;
 	action: Action;
 	changes: StatChange[];
+}
+
+/// The play zone's view of the turn in progress (or just ended).
+export interface TurnView {
+	actor: Player | null;
+	plays: Play[];
+	/// Set once the actor ended the turn; the plays linger until the next
+	/// card is played by anyone.
+	ended: Play | null;
 }
 
 export interface LogEntry {
@@ -41,7 +50,7 @@ export class GameClient {
 	outcome = $state<Outcome | null>(null);
 	log = $state<LogEntry[]>([]);
 	thinking = $state(false);
-	play = $state<Play | null>(null);
+	turn = $state<TurnView>({ actor: null, plays: [], ended: null });
 
 	#ws: WebSocket | null = null;
 	#nextId = 1;
@@ -84,7 +93,17 @@ export class GameClient {
 		this.outcome = null;
 		this.log = [];
 		this.thinking = false;
-		this.play = null;
+		this.turn = { actor: null, plays: [], ended: null };
+	}
+
+	#record(play: Play) {
+		const t = this.turn;
+		if (play.action === 'EndTurn') {
+			this.turn = { actor: play.player, plays: t.actor === play.player ? t.plays : [], ended: play };
+			return;
+		}
+		const fresh = t.ended !== null || t.actor !== play.player;
+		this.turn = { actor: play.player, plays: fresh ? [play] : [...t.plays, play], ended: null };
 	}
 
 	#push(entry: Omit<LogEntry, 'id'>) {
@@ -121,7 +140,7 @@ export class GameClient {
 				});
 				break;
 			case 'acted':
-				this.play = { id: this.#nextId, player: msg.player, action: msg.action, changes: msg.changes };
+				this.#record({ id: this.#nextId, player: msg.player, action: msg.action, changes: msg.changes });
 				this.#push({ kind: 'act', player: msg.player, title: msg.summary[0] ?? '', lines: msg.summary.slice(1) });
 				break;
 			case 'game_over':

@@ -83,7 +83,7 @@
 
 			<Entity entity={obs.opponent} title={client.you ? 'Opponent' : obs.viewer === 'First' ? 'Second' : 'First'} cards={client.cards} active={obs.to_move !== obs.viewer} />
 
-			<PlayZone play={client.play} cards={client.cards} you={client.you} thinking={client.thinking} />
+			<PlayZone turn={client.turn} cards={client.cards} you={client.you} thinking={client.thinking} />
 
 			<div class="hand-row">
 				<div class="hand">
