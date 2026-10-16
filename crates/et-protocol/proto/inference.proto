@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package emergent_tactics.inference.v1;
+
+// Policy/value evaluation of encoded observations. The service knows
+// nothing about the game: it maps feature vectors to priors and values.
+service Inference {
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+  rpc Info(InfoRequest) returns (InfoResponse);
+}
+
+message EvaluateRequest {
+  // Flattened batch of feature vectors, row-major: batch_size * feature_len.
+  repeated float features = 1;
+  uint32 batch_size = 2;
+  uint32 feature_len = 3;
+  // Optional per-row legal-action mask, row-major: batch_size * action_space.
+  repeated bool legal_mask = 4;
+}
+
+message EvaluateResponse {
+  // Flattened policy logits, row-major: batch_size * action_space.
+  repeated float policy = 1;
+  // One value per row in [-1, 1].
+  repeated float value = 2;
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+  string model_name = 1;
+  string checkpoint = 2;
+  uint32 feature_len = 3;
+  uint32 action_space = 4;
+}

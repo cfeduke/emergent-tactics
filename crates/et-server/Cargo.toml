@@ -1,0 +1,21 @@
+[package]
+name = "et-server"
+description = "Game server: WebSocket/JSON sessions for human-vs-AI and AI-vs-AI, drives et-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+et-engine.workspace = true
+et-search.workspace = true
+et-protocol.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+anyhow.workspace = true

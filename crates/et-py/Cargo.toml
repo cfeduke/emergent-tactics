@@ -1,0 +1,17 @@
+[package]
+name = "et-py"
+description = "PyO3 bindings exposing the engine, encoder, and search to Python for self-play"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "emergent_tactics"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+et-engine.workspace = true
+et-search.workspace = true
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py312"] }

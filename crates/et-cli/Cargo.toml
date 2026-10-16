@@ -1,0 +1,18 @@
+[package]
+name = "et-cli"
+description = "Headless tools: AI-vs-AI matches, benchmarks, difficulty calibration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "et"
+path = "src/main.rs"
+
+[dependencies]
+et-engine.workspace = true
+et-search.workspace = true
+clap.workspace = true
+anyhow.workspace = true

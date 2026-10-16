@@ -1,0 +1,17 @@
+[package]
+name = "et-inference"
+description = "gRPC inference service: loads an ONNX policy/value model and evaluates batches"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+et-protocol.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+anyhow.workspace = true

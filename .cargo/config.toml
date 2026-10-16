@@ -1,0 +1,12 @@
+[env]
+# System python3 is 3.15, newer than pyo3 supports; et-py targets the
+# stable ABI (abi3-py312) so this only suppresses the version check.
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY = "1"
+
+# Python extension modules resolve CPython symbols at load time. maturin
+# adds this itself; plain `cargo build` of et-py needs it on macOS.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

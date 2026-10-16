@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/et-engine",
+    "crates/et-search",
+    "crates/et-protocol",
+    "crates/et-inference",
+    "crates/et-server",
+    "crates/et-cli",
+    "crates/et-py",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/cfeduke/emergent-tactics"
+authors = ["Charles Feduke <charles.feduke@gmail.com>"]
+
+[workspace.dependencies]
+et-engine = { path = "crates/et-engine" }
+et-search = { path = "crates/et-search" }
+et-protocol = { path = "crates/et-protocol" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.9"
+rand_chacha = "0.9"
+thiserror = "2"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tonic = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+prost = "0.14"
+protox = "0.9"
+axum = { version = "0.8", features = ["ws"] }
+clap = { version = "4", features = ["derive"] }
+pyo3 = "0.27"
+ort = "2.0.0-rc.11"

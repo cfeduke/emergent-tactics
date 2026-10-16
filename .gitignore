@@ -1,0 +1,21 @@
+# Rust
+/target/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+training/data/
+
+# Node
+node_modules/
+web/.svelte-kit/
+web/build/
+
+# Models: keep the tree, ignore weights except a tiny committed baseline
+models/*
+!models/.gitkeep
+!models/baseline.onnx
+
+.DS_Store
