@@ -33,6 +33,7 @@ pub struct AppState {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
     let args = Args::parse();
+    check_inference(&args.inference).await?;
     let state = Arc::new(AppState { ai_delay_ms: args.ai_delay_ms });
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -46,4 +47,30 @@ async fn main() -> anyhow::Result<()> {
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
     ws.on_upgrade(move |socket: WebSocket| session::run(socket, state))
+}
+
+/// Refuse to start against an inference service whose model was trained
+/// on a different card library. An unreachable service is only a warning:
+/// rollout evaluation still works without it.
+async fn check_inference(endpoint: &str) -> anyhow::Result<()> {
+    use et_protocol::inference::{InfoRequest, inference_client::InferenceClient};
+    let ours = et_engine::library_fingerprint_hex();
+    let connect = tokio::time::timeout(std::time::Duration::from_secs(2), InferenceClient::connect(endpoint.to_string()));
+    let mut client = match connect.await {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => {
+            tracing::warn!(endpoint, error = %e, "inference service unreachable; using rollout evaluation");
+            return Ok(());
+        }
+        Err(_) => {
+            tracing::warn!(endpoint, "inference service connect timed out; using rollout evaluation");
+            return Ok(());
+        }
+    };
+    let info = client.info(InfoRequest {}).await?.into_inner();
+    if !info.library_fingerprint.is_empty() && info.library_fingerprint != ours {
+        anyhow::bail!("inference model fingerprint {} does not match engine library {ours}", info.library_fingerprint);
+    }
+    tracing::info!(checkpoint = %info.checkpoint, fingerprint = %info.library_fingerprint, engine = %ours, "inference service ok");
+    Ok(())
 }

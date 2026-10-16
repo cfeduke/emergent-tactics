@@ -10,7 +10,9 @@ import type {
 	Outcome,
 	Player,
 	ServerMessage,
-	StatChange
+	StatChange,
+	StatusInfo,
+	StatusKind
 } from './protocol.js';
 
 /// One applied action, kept in the play zone for the rest of the turn.
@@ -42,7 +44,9 @@ export interface LogEntry {
 export class GameClient {
 	status = $state<'connecting' | 'open' | 'closed'>('connecting');
 	cards = $state<Map<CardKind, CardInfo>>(new Map());
+	statuses = $state<Map<StatusKind, StatusInfo>>(new Map());
 	difficulties = $state<string[]>([]);
+	libraryFingerprint = $state('');
 	you = $state<Player | null>(null);
 	seats = $state<{ first: string; second: string } | null>(null);
 	observation = $state<Observation | null>(null);
@@ -114,7 +118,9 @@ export class GameClient {
 		switch (msg.type) {
 			case 'catalog':
 				this.cards = new Map(msg.cards.map((c) => [c.kind, c]));
+				this.statuses = new Map(msg.statuses.map((s) => [s.kind, s]));
 				this.difficulties = msg.difficulties;
+				this.libraryFingerprint = msg.library_fingerprint;
 				break;
 			case 'game_started':
 				this.you = msg.you;

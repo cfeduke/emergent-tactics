@@ -1,14 +1,21 @@
 <script lang="ts">
 	import type { Play, TurnView } from './game.svelte.js';
-	import type { CardInfo, CardKind, Player, StatChange } from './protocol.js';
+	import type { CardInfo, CardKind, Player, StatChange, StatusInfo, StatusKind } from './protocol.js';
 	import Card from './Card.svelte';
 
 	let {
 		turn,
 		cards,
+		statuses,
 		you,
 		thinking = false
-	}: { turn: TurnView; cards: Map<CardKind, CardInfo>; you: Player | null; thinking?: boolean } = $props();
+	}: {
+		turn: TurnView;
+		cards: Map<CardKind, CardInfo>;
+		statuses: Map<StatusKind, StatusInfo>;
+		you: Player | null;
+		thinking?: boolean;
+	} = $props();
 
 	const who = (p: Player) => (you === null ? p : p === you ? 'You' : 'Opponent');
 
@@ -25,16 +32,17 @@
 				return { text: `${sign}${d} ♥`, tone: d < 0 ? 'bad' : 'good' };
 			case 'block':
 				return { text: `${sign}${d} ⛨`, tone: d < 0 ? 'neutral' : 'good' };
-			case 'vulnerable':
-				return { text: `Vulnerable ${c.after}`, tone: 'bad' };
-			case 'stand_ground':
-				return d > 0 ? { text: 'Stand Ground readied', tone: 'good' } : null;
-			case 'fury':
-				return c.after ? { text: 'Fury in play', tone: 'good' } : null;
 			case 'resource':
 				return { text: `◆ ${c.after}`, tone: 'neutral' };
-			default:
-				return null;
+			default: {
+				if (!c.stat.startsWith('status:')) return null;
+				const kind = c.stat.slice('status:'.length) as StatusKind;
+				const info = statuses.get(kind);
+				const name = info?.name ?? kind;
+				const tone = info?.polarity === 'Debuff' ? 'bad' : 'good';
+				if (c.after === 0) return { text: `${name} ended`, tone: 'neutral' };
+				return { text: `${name} ${c.after}`, tone };
+			}
 		}
 	}
 

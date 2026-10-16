@@ -1,12 +1,20 @@
 <script lang="ts">
-	import type { CardInfo, CardKind, PublicEntity } from './protocol.js';
+	import type { CardInfo, CardKind, PublicEntity, StatusInfo, StatusKind } from './protocol.js';
 	let {
 		entity,
 		title,
 		cards,
+		statuses,
 		active = false,
 		faceDown
-	}: { entity: PublicEntity; title: string; cards: Map<CardKind, CardInfo>; active?: boolean; faceDown?: CardKind[] } = $props();
+	}: {
+		entity: PublicEntity;
+		title: string;
+		cards: Map<CardKind, CardInfo>;
+		statuses: Map<StatusKind, StatusInfo>;
+		active?: boolean;
+		faceDown?: CardKind[];
+	} = $props();
 
 	const name = (k: CardKind) => cards.get(k)?.name ?? k;
 	const list = (ks: CardKind[]) => (ks.length ? ks.map(name).join(', ') : '—');
@@ -22,16 +30,18 @@
 		<span class="stat life">♥ {entity.lifepool}</span>
 		<span class="stat block">⛨ {entity.block}</span>
 		<span class="stat res">◆ {entity.resource} / {entity.resource_limit}{entity.resource_bonus ? ` +${entity.resource_bonus}` : ''}</span>
-		{#if entity.vulnerable}<span class="stat bad">Vulnerable {entity.vulnerable}</span>{/if}
-		{#if entity.fury}<span class="stat good">Fury</span>{/if}
-		{#if entity.stand_ground_pending}<span class="stat good">Stand Ground ×{entity.stand_ground_pending}</span>{/if}
+		{#each entity.statuses as [kind, n] (kind)}
+			<span class="stat {statuses.get(kind)?.polarity === 'Debuff' ? 'bad' : 'good'}">{statuses.get(kind)?.name ?? kind} {n}</span>
+		{/each}
 	</div>
 	<div class="zones">
+		<span>Deck {entity.deck_size}</span>
 		<span>Hand {entity.hand_count}</span>
 		<span>Draw {entity.draw_count}</span>
 		<span>Discard ↑ [{list(entity.discard_face_up)}]</span>
 		<span>Discard ↓ {entity.discard_face_down_count}{faceDown ? ` [${list(faceDown)}]` : ''}</span>
 		<span>Exile [{list(entity.exile)}]</span>
+		{#if !faceDown}<span>Seen in hidden zones [{list(entity.seen_hidden)}]</span>{/if}
 		<span>Played this turn [{list(entity.played_this_turn)}]</span>
 	</div>
 </div>

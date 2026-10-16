@@ -76,6 +76,9 @@ fn emergent_tactics(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FEATURE_LEN", encode::FEATURE_LEN)?;
     m.add("ACTION_SPACE", encode::ACTION_SPACE)?;
     m.add("ACTION_NAMES", action_names())?;
+    m.add("LIBRARY_FINGERPRINT", et_engine::library_fingerprint_hex())?;
+    m.add("STATUS_NAMES", et_engine::StatusKind::ALL.iter().map(|k| k.def().name.to_string()).collect::<Vec<_>>())?;
+    m.add("ARCHETYPE_NAMES", et_engine::Archetype::ALL.iter().map(|a| a.def().name.to_string()).collect::<Vec<_>>())?;
     Ok(())
 }
 

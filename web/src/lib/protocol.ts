@@ -5,7 +5,10 @@
 export type Player = 'First' | 'Second';
 export type CardKind = 'Strike' | 'Defend' | 'StandGround' | 'Charge' | 'Fury';
 export type CardType = 'Attack' | 'Skill' | 'Power';
-export type Archetype = 'All' | 'Warrior';
+export type Archetype = 'Warrior';
+export type Availability = 'Both' | 'NpcOnly' | 'PlayerOnly';
+export type StatusKind = 'Fury' | 'StandGround' | 'Vulnerable';
+export type Polarity = 'Buff' | 'Debuff';
 export type Action = { Play: CardKind } | 'EndTurn';
 export type Outcome = { Win: Player } | 'Draw';
 
@@ -13,9 +16,26 @@ export interface CardInfo {
 	kind: CardKind;
 	name: string;
 	card_type: CardType;
-	archetype: Archetype;
+	archetype: Archetype | null;
+	availability: Availability;
 	cost: number;
 	text: string;
+}
+
+export interface StatusInfo {
+	kind: StatusKind;
+	name: string;
+	polarity: Polarity;
+}
+
+export interface ArchetypeInfo {
+	archetype: Archetype;
+	name: string;
+	availability: Availability;
+	lifepool: number;
+	draw_amount: number;
+	resource_limit: number;
+	pool: CardKind[];
 }
 
 export interface PublicEntity {
@@ -25,14 +45,14 @@ export interface PublicEntity {
 	resource: number;
 	resource_limit: number;
 	resource_bonus: number;
-	vulnerable: number;
-	fury: boolean;
-	stand_ground_pending: number;
+	statuses: [StatusKind, number][];
+	deck_size: number;
 	hand_count: number;
 	draw_count: number;
 	discard_face_up: CardKind[];
 	discard_face_down_count: number;
 	exile: CardKind[];
+	seen_hidden: CardKind[];
 	played_this_turn: CardKind[];
 }
 
@@ -43,6 +63,7 @@ export interface Observation {
 	turn: number;
 	me: PublicEntity;
 	opponent: PublicEntity;
+	deck: CardKind[];
 	hand: CardKind[];
 	discard_face_down: CardKind[];
 }
@@ -56,7 +77,8 @@ export interface CandidateInfo {
 
 export interface StatChange {
 	player: Player;
-	stat: 'life' | 'block' | 'vulnerable' | 'resource' | 'stand_ground' | 'fury' | string;
+	/** 'life' | 'block' | 'resource' | `status:${StatusKind}` */
+	stat: string;
 	before: number;
 	after: number;
 }
@@ -67,7 +89,14 @@ export type ClientMessage =
 	| { type: 'act'; action: Action };
 
 export type ServerMessage =
-	| { type: 'catalog'; cards: CardInfo[]; difficulties: string[] }
+	| {
+			type: 'catalog';
+			cards: CardInfo[];
+			statuses: StatusInfo[];
+			archetypes: ArchetypeInfo[];
+			difficulties: string[];
+			library_fingerprint: string;
+	  }
 	| { type: 'game_started'; game_id: string; you: Player | null; first: string; second: string }
 	| { type: 'state'; observation: Observation; legal: Action[] }
 	| {

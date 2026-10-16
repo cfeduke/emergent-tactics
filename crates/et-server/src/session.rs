@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
-use et_engine::{Action, GameState, Outcome, Player, PublicEntity};
-use et_protocol::ws::{CandidateInfo, CardInfo, ClientMessage, ServerMessage, StatChange};
+use et_engine::{Action, GameState, Outcome, Player, PublicEntity, StatusKind};
+use et_protocol::ws::{ArchetypeInfo, CandidateInfo, CardInfo, ClientMessage, ServerMessage, StatChange, StatusInfo};
 use et_search::{Difficulty, Evaluator, RolloutEvaluator, SearchResult, search};
 use futures_util::{SinkExt, StreamExt};
 use rand::{Rng, SeedableRng, seq::IndexedRandom};
@@ -69,7 +69,14 @@ pub async fn run(socket: WebSocket, app: Arc<AppState>) {
     let (mut sink, mut stream) = socket.split();
     let mut game: Option<Game> = None;
 
-    if !send(&mut sink, &ServerMessage::Catalog { cards: CardInfo::all(), difficulties: difficulty_names() }).await {
+    let catalog = ServerMessage::Catalog {
+        cards: CardInfo::all(),
+        statuses: StatusInfo::all(),
+        archetypes: ArchetypeInfo::all(),
+        difficulties: difficulty_names(),
+        library_fingerprint: et_engine::library_fingerprint_hex(),
+    };
+    if !send(&mut sink, &catalog).await {
         return;
     }
 
@@ -263,9 +270,10 @@ fn summarize(before: &GameState, after: &GameState, player: Player, action: &Act
         };
         change("life", b.lifepool, a.lifepool);
         change("block", b.block as i32, a.block as i32);
-        change("vulnerable", b.vulnerable as i32, a.vulnerable as i32);
-        change("stand_ground", b.stand_ground_pending as i32, a.stand_ground_pending as i32);
-        change("fury", b.fury as i32, a.fury as i32);
+        let status = |e: &PublicEntity, k: StatusKind| e.statuses.iter().find(|(kk, _)| *kk == k).map(|(_, n)| *n as i32).unwrap_or(0);
+        for k in StatusKind::ALL {
+            change(&format!("status:{:?}", k), status(&b, k), status(&a, k));
+        }
         if matches!(action, Action::EndTurn) && after.to_move == p {
             change("resource", b.resource as i32, a.resource as i32);
         }

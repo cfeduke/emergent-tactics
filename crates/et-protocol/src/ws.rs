@@ -1,7 +1,7 @@
 //! JSON messages exchanged over the WebSocket between web client and server.
 //! Tagged enums keep the wire self-describing and easy to inspect.
 
-use et_engine::{Action, Archetype, CardKind, CardType, Observation, Outcome, Player};
+use et_engine::{Action, Archetype, Availability, CardKind, CardType, Observation, Outcome, Player, Polarity, StatusKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,8 @@ pub struct CardInfo {
     pub kind: CardKind,
     pub name: String,
     pub card_type: CardType,
-    pub archetype: Archetype,
+    pub archetype: Option<Archetype>,
+    pub availability: Availability,
     pub cost: u32,
     pub text: String,
 }
@@ -30,7 +31,59 @@ impl CardInfo {
             .iter()
             .map(|k| {
                 let d = k.def();
-                CardInfo { kind: *k, name: d.name.into(), card_type: d.card_type, archetype: d.archetype, cost: d.cost, text: d.text.into() }
+                CardInfo {
+                    kind: *k,
+                    name: d.name.into(),
+                    card_type: d.card_type,
+                    archetype: d.archetype,
+                    availability: d.availability,
+                    cost: d.cost,
+                    text: d.text.into(),
+                }
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusInfo {
+    pub kind: StatusKind,
+    pub name: String,
+    pub polarity: Polarity,
+}
+
+impl StatusInfo {
+    pub fn all() -> Vec<StatusInfo> {
+        StatusKind::ALL.iter().map(|k| StatusInfo { kind: *k, name: k.def().name.into(), polarity: k.def().polarity }).collect()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchetypeInfo {
+    pub archetype: Archetype,
+    pub name: String,
+    pub availability: Availability,
+    pub lifepool: i32,
+    pub draw_amount: u32,
+    pub resource_limit: u32,
+    pub pool: Vec<CardKind>,
+}
+
+impl ArchetypeInfo {
+    pub fn all() -> Vec<ArchetypeInfo> {
+        Archetype::ALL
+            .iter()
+            .map(|a| {
+                let d = a.def();
+                ArchetypeInfo {
+                    archetype: *a,
+                    name: d.name.into(),
+                    availability: d.availability,
+                    lifepool: d.lifepool,
+                    draw_amount: d.draw_amount,
+                    resource_limit: d.resource_limit,
+                    pool: d.pool.to_vec(),
+                }
             })
             .collect()
     }
@@ -50,7 +103,7 @@ pub struct CandidateInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatChange {
     pub player: Player,
-    /// One of: life, block, vulnerable, resource, stand_ground, fury.
+    /// One of: life, block, resource, or `status:<StatusKind>`.
     pub stat: String,
     pub before: i32,
     pub after: i32,
@@ -60,7 +113,13 @@ pub struct StatChange {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
     /// Sent once on connect: static data the client needs to render.
-    Catalog { cards: Vec<CardInfo>, difficulties: Vec<String> },
+    Catalog {
+        cards: Vec<CardInfo>,
+        statuses: Vec<StatusInfo>,
+        archetypes: Vec<ArchetypeInfo>,
+        difficulties: Vec<String>,
+        library_fingerprint: String,
+    },
     GameStarted { game_id: String, you: Option<Player>, first: String, second: String },
     /// Observation from `observation.viewer`'s perspective. `legal` is
     /// empty unless the receiving client may act.

@@ -9,6 +9,9 @@ def test_engine_roundtrip():
     assert g.to_move() == 0
     assert len(g.encode()) == et.FEATURE_LEN
     assert len(et.ACTION_NAMES) == et.ACTION_SPACE
+    assert len(et.LIBRARY_FINGERPRINT) == 16
+    assert "Vulnerable" in et.STATUS_NAMES
+    assert et.ARCHETYPE_NAMES == ["Warrior"]
     legal = g.legal_actions()
     assert et.ACTION_SPACE - 1 in legal  # end turn always legal
     g.apply(et.ACTION_SPACE - 1)

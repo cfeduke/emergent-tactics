@@ -11,6 +11,6 @@ pub mod encode;
 pub mod observation;
 pub mod state;
 
-pub use cards::{Archetype, CardKind, CardType};
+pub use cards::{Archetype, Availability, CardKind, CardType, Polarity, StatusKind, Tick, library_fingerprint, library_fingerprint_hex};
 pub use observation::{Observation, PublicEntity};
-pub use state::{Action, Entity, GameState, Outcome, Player, MAX_ROUNDS};
+pub use state::{Action, CopyId, Entity, GameState, MAX_ROUNDS, Outcome, Player};

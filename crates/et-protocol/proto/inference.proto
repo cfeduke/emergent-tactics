@@ -32,4 +32,8 @@ message InfoResponse {
   string checkpoint = 2;
   uint32 feature_len = 3;
   uint32 action_space = 4;
+  // Hex digest of the card library the model was trained against. The
+  // game server refuses to use a model whose fingerprint differs from
+  // its own engine's.
+  string library_fingerprint = 5;
 }

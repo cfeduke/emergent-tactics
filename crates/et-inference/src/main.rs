@@ -13,10 +13,15 @@ struct Args {
     listen: String,
     #[arg(long)]
     model: Option<std::path::PathBuf>,
+    /// Card-library fingerprint the model was trained against. Will be
+    /// read from the ONNX metadata once models exist.
+    #[arg(long, default_value = "")]
+    library_fingerprint: String,
 }
 
 struct Service {
     checkpoint: String,
+    library_fingerprint: String,
 }
 
 #[tonic::async_trait]
@@ -37,6 +42,7 @@ impl Inference for Service {
             checkpoint: self.checkpoint.clone(),
             feature_len: 0,
             action_space: et_engine_action_space() as u32,
+            library_fingerprint: self.library_fingerprint.clone(),
         }))
     }
 }
@@ -51,7 +57,8 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let addr = args.listen.parse()?;
     let checkpoint = args.model.map(|p| p.display().to_string()).unwrap_or_else(|| "none".into());
-    tracing::info!(%addr, %checkpoint, "inference service listening");
-    Server::builder().add_service(InferenceServer::new(Service { checkpoint })).serve(addr).await?;
+    tracing::info!(%addr, %checkpoint, fingerprint = %args.library_fingerprint, "inference service listening");
+    let service = Service { checkpoint, library_fingerprint: args.library_fingerprint };
+    Server::builder().add_service(InferenceServer::new(service)).serve(addr).await?;
     Ok(())
 }

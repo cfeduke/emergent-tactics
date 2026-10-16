@@ -37,6 +37,7 @@
 <header>
 	<h1>Emergent Tactics</h1>
 	<span class="status {client.status}">{client.status}</span>
+	{#if client.libraryFingerprint}<span class="fp" title="card library fingerprint">lib {client.libraryFingerprint.slice(0, 8)}</span>{/if}
 	<form class="controls" onsubmit={(e) => e.preventDefault()}>
 		<label>
 			Play vs
@@ -81,9 +82,9 @@
 				{#if client.thinking}<em class="thinking"> · AI thinking…</em>{/if}
 			</div>
 
-			<Entity entity={obs.opponent} title={client.you ? 'Opponent' : obs.viewer === 'First' ? 'Second' : 'First'} cards={client.cards} active={obs.to_move !== obs.viewer} />
+			<Entity entity={obs.opponent} title={client.you ? 'Opponent' : obs.viewer === 'First' ? 'Second' : 'First'} cards={client.cards} statuses={client.statuses} active={obs.to_move !== obs.viewer} />
 
-			<PlayZone turn={client.turn} cards={client.cards} you={client.you} thinking={client.thinking} />
+			<PlayZone turn={client.turn} cards={client.cards} statuses={client.statuses} you={client.you} thinking={client.thinking} />
 
 			<div class="hand-row">
 				<div class="hand">
@@ -95,7 +96,7 @@
 				<button class="end" onclick={endTurn} disabled={!canEnd}>End turn</button>
 			</div>
 
-			<Entity entity={obs.me} title={client.you ? 'You' : obs.viewer} cards={client.cards} active={obs.to_move === obs.viewer} faceDown={obs.discard_face_down} />
+			<Entity entity={obs.me} title={client.you ? 'You' : obs.viewer} cards={client.cards} statuses={client.statuses} active={obs.to_move === obs.viewer} faceDown={obs.discard_face_down} />
 
 			{#if client.outcome}
 				<div class="banner">
@@ -142,6 +143,11 @@
 	}
 	.status.closed {
 		background: #7a2b2b;
+	}
+	.fp {
+		font-size: 0.7rem;
+		color: #6c7380;
+		font-family: ui-monospace, monospace;
 	}
 	.controls {
 		display: flex;
