@@ -1,0 +1,13 @@
+[package]
+name = "et-model"
+description = "ONNX policy/value model loading, metadata checks, and batched inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+ort.workspace = true
+anyhow.workspace = true
+tracing.workspace = true

@@ -62,3 +62,23 @@ trained network then replaces random rollouts as the evaluator, which makes
 each iteration far more informative, which produces better samples, and so
 on. Difficulty levels come from which checkpoint is used plus the search
 budget and temperature.
+
+## Network evaluation and batching
+
+With a trained model the evaluator encodes the leaf observation and asks
+the model for logits and a value. Logits are turned into priors by a
+softmax restricted to the legal actions.
+
+A single model call is expensive relative to a tree step, so calls are
+batched. `et-model::Batcher` runs the model on its own thread; every search
+worker sends its leaf and blocks for the reply, and the batcher evaluates
+all waiting leaves together once the batch fills or a short wait elapses.
+Because each worker has exactly one leaf outstanding, the average batch
+size equals the number of workers. Going beyond that needs several
+concurrent searches per worker or leaf-parallel search with virtual loss,
+which is the next throughput step once it matters.
+
+In the game server each search runs on a blocking thread and evaluates
+leaves one at a time over gRPC. A local round trip is well under a
+millisecond, so `net-adept` decides in tens of milliseconds and
+`net-master` in a fraction of a second, which is fine for play.

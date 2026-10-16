@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::evaluator::outcome_value;
 use crate::{Difficulty, Evaluator};
+#[cfg(test)]
+use crate::EvaluatorKind;
 
 /// Everything the search knew about one root action. Sent to the client
 /// verbatim so the AI's reasoning can be inspected.
@@ -284,7 +286,7 @@ mod tests {
         }
         let obs = s.observe(s.to_move);
         let legal = s.legal_actions();
-        let d = Difficulty { name: "t".into(), iterations: 300, determinizations: 10, temperature: 0.0, exploration: 1.4, root_noise: None };
+        let d = Difficulty { name: "t".into(), iterations: 300, determinizations: 10, temperature: 0.0, exploration: 1.4, root_noise: None, evaluator: EvaluatorKind::Rollout };
         let res = search(&obs, &legal, &d, &RolloutEvaluator { max_depth: 40 }, &mut r);
         assert_eq!(res.action, Action::Play(CardKind::Strike), "{:?}", res.stats.candidates);
         let strike = res.stats.candidates.iter().find(|c| c.action == Action::Play(CardKind::Strike)).unwrap();
@@ -296,7 +298,7 @@ mod tests {
         let mut r = ChaCha8Rng::seed_from_u64(2);
         let s = GameState::new(&mut r);
         let obs = s.observe(s.to_move);
-        let d = Difficulty { name: "t".into(), iterations: 100, determinizations: 4, temperature: 1.0, exploration: 1.4, root_noise: Some((0.5, 0.25)) };
+        let d = Difficulty { name: "t".into(), iterations: 100, determinizations: 4, temperature: 1.0, exploration: 1.4, root_noise: Some((0.5, 0.25)), evaluator: EvaluatorKind::Rollout };
         let res = search(&obs, &s.legal_actions(), &d, &RolloutEvaluator { max_depth: 40 }, &mut r);
         let total: u32 = res.stats.candidates.iter().map(|c| c.visits).sum();
         assert_eq!(total, 100);

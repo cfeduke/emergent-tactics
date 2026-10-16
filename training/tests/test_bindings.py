@@ -58,3 +58,15 @@ def test_self_play_rollout_produces_consistent_samples():
     vals = a["value"][g0]
     if 0.0 not in vals:
         assert len({(p, v) for p, v in zip(players, vals)}) == 2
+
+
+def test_network_self_play_and_arena_if_model_present():
+    from pathlib import Path
+
+    model = Path(__file__).resolve().parents[2] / "models" / "gen1.onnx"
+    if not model.exists():
+        return
+    raw = et.self_play_network(str(model), games=4, seed=1, iterations=20, determinizations=3, threads=2)
+    assert raw["stats"]["games"] == 4 and raw["stats"]["requests"] > 0
+    s = et.arena_match("net-novice", "random", 4, model=str(model), threads=2)
+    assert s["games"] == 4

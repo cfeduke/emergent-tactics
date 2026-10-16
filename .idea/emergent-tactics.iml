@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/et-cli/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/et-engine/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/et-inference/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/et-model/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/et-protocol/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/et-py/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/et-search/src" isTestSource="false" />

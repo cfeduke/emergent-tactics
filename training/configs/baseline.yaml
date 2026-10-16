@@ -4,6 +4,8 @@ data_dir: data
 models_dir: ../models
 
 selfplay:
+  evaluator: rollout       # rollout | network
+  model: latest            # ONNX path for evaluator: network, or "latest" in models_dir
   games: 2000
   seed: 1
   iterations: 200
@@ -13,8 +15,11 @@ selfplay:
   temperature_turns: 6     # entity turns played at temperature; then greedy
   root_noise_alpha: 0.5
   root_noise_weight: 0.25
-  rollout_depth: 60
+  rollout_depth: 60        # rollout evaluator only
   threads: 0               # 0 = all cores
+  max_batch: 64            # network evaluator: leaves merged per model call
+  max_wait_us: 500         # network evaluator: how long to wait to fill a batch
+  intra_threads: 2         # network evaluator: ONNX Runtime threads per call
 
 model:
   width: 128
@@ -31,3 +36,11 @@ train:
   value_weight: 1.0
   val_fraction: 0.1
   seed: 0
+
+arena:
+  games: 200
+  seed: 0
+  matchups:
+    - [net-adept, adept]
+    - [net-novice, novice]
+    - [net-adept, random]

@@ -3,7 +3,10 @@
 //! duplicated in Python.
 
 use et_engine::{GameState, Outcome, Player, encode};
-use et_search::{Difficulty, RolloutEvaluator, SelfPlayConfig, search, self_play};
+use et_model::{Batcher, OnnxModel};
+use et_search::{Controller, Difficulty, Evaluator, EvaluatorKind, NetworkEvaluator, RolloutEvaluator, SelfPlayConfig, SelfPlayStats, Sample, arena, search, self_play};
+use std::sync::Arc;
+use std::time::Duration;
 use pyo3::types::PyBytes;
 use pyo3::prelude::*;
 use rand::SeedableRng;
@@ -73,7 +76,7 @@ impl PyGame {
     #[pyo3(signature = (iterations = 200, determinizations = 10, exploration = 1.4, temperature = 1.0, rollout_depth = 60))]
     #[allow(clippy::type_complexity)]
     fn search(&mut self, iterations: u32, determinizations: u32, exploration: f32, temperature: f32, rollout_depth: u32) -> (usize, f32, Vec<(usize, f32, u32, f32)>) {
-        let d = Difficulty { name: "py".into(), iterations, determinizations, temperature, exploration, root_noise: None };
+        let d = Difficulty { name: "py".into(), iterations, determinizations, temperature, exploration, root_noise: None, evaluator: EvaluatorKind::Rollout };
         let obs = self.state.observe(self.state.to_move);
         let legal = self.state.legal_actions();
         let res = search(&obs, &legal, &d, &RolloutEvaluator { max_depth: rollout_depth }, &mut self.rng);
@@ -92,6 +95,30 @@ fn f32_bytes<'py>(py: Python<'py>, v: &[f32]) -> Bound<'py, PyBytes> {
         out.extend_from_slice(&x.to_le_bytes());
     }
     PyBytes::new(py, &out)
+}
+
+fn load_model(path: &str, intra_threads: usize) -> PyResult<Arc<OnnxModel>> {
+    let m = OnnxModel::load(std::path::Path::new(path), intra_threads).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let ours = et_engine::library_fingerprint_hex();
+    if m.info().library_fingerprint != ours {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!("model fingerprint {} != engine {ours}", m.info().library_fingerprint)));
+    }
+    Ok(Arc::new(m))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn selfplay_config(games: u32, seed: u64, iterations: u32, determinizations: u32, exploration: f32, temperature: f32, temperature_turns: u32, root_noise_alpha: f32, root_noise_weight: f32, threads: usize) -> SelfPlayConfig {
+    SelfPlayConfig {
+        games,
+        seed,
+        iterations,
+        determinizations,
+        exploration,
+        temperature,
+        temperature_turns,
+        root_noise: if root_noise_weight > 0.0 { Some((root_noise_alpha, root_noise_weight)) } else { None },
+        threads,
+    }
 }
 
 /// Play games in parallel with rollout-evaluated ISMCTS on both sides and
@@ -116,18 +143,85 @@ fn self_play_rollout<'py>(
     rollout_depth: u32,
     threads: usize,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
-    let config = SelfPlayConfig {
-        games,
-        seed,
-        iterations,
-        determinizations,
-        exploration,
-        temperature,
-        temperature_turns,
-        root_noise: if root_noise_weight > 0.0 { Some((root_noise_alpha, root_noise_weight)) } else { None },
-        threads,
-    };
+    let config = selfplay_config(games, seed, iterations, determinizations, exploration, temperature, temperature_turns, root_noise_alpha, root_noise_weight, threads);
     let (samples, stats) = py.detach(|| self_play(&config, || RolloutEvaluator { max_depth: rollout_depth }));
+    pack_samples(py, samples, stats, None)
+}
+
+/// Same as `self_play_rollout` but leaves are evaluated by the ONNX model
+/// at `model`, batched across all worker threads. The stats dict also
+/// reports `batches` and `requests` so the batching efficiency is visible.
+#[pyfunction]
+#[pyo3(signature = (model, games, seed = 0, iterations = 200, determinizations = 10, exploration = 1.4, temperature = 1.0, temperature_turns = 1000, root_noise_alpha = 0.5, root_noise_weight = 0.25, threads = 0, max_batch = 64, max_wait_us = 500, intra_threads = 2))]
+#[allow(clippy::too_many_arguments)]
+fn self_play_network<'py>(
+    py: Python<'py>,
+    model: &str,
+    games: u32,
+    seed: u64,
+    iterations: u32,
+    determinizations: u32,
+    exploration: f32,
+    temperature: f32,
+    temperature_turns: u32,
+    root_noise_alpha: f32,
+    root_noise_weight: f32,
+    threads: usize,
+    max_batch: usize,
+    max_wait_us: u64,
+    intra_threads: usize,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let config = selfplay_config(games, seed, iterations, determinizations, exploration, temperature, temperature_turns, root_noise_alpha, root_noise_weight, threads);
+    let m = load_model(model, intra_threads)?;
+    let batcher = Batcher::spawn(m, max_batch, Duration::from_micros(max_wait_us));
+    let b2 = batcher.clone();
+    let (samples, stats) = py.detach(|| self_play(&config, || NetworkEvaluator::new(b2.clone()).expect("dims checked at load")));
+    let bs = batcher.stats();
+    pack_samples(py, samples, stats, Some((bs.requests, bs.batches)))
+}
+
+/// Headless matches: controllers are "random" or a preset name; net-*
+/// presets need `model`. Returns a stats dict.
+#[pyfunction]
+#[pyo3(signature = (first, second, games, seed = 0, model = None, threads = 0))]
+fn arena_match<'py>(py: Python<'py>, first: &str, second: &str, games: u32, seed: u64, model: Option<&str>, threads: usize) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let side = |name: &str| -> PyResult<Option<Difficulty>> {
+        if name == "random" {
+            return Ok(None);
+        }
+        Difficulty::by_name(name).map(Some).ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("unknown controller {name}")))
+    };
+    let (a, b) = (side(first)?, side(second)?);
+    let needs_net = [&a, &b].iter().any(|s| matches!(s, Some(d) if d.evaluator == EvaluatorKind::Network));
+    let rollout = RolloutEvaluator { max_depth: 60 };
+    let net = if needs_net {
+        let path = model.ok_or_else(|| pyo3::exceptions::PyValueError::new_err("net-* presets need model"))?;
+        Some(NetworkEvaluator::new(Batcher::spawn(load_model(path, 2)?, 64, Duration::from_micros(500))).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?)
+    } else {
+        None
+    };
+    let ctl = |s: &Option<Difficulty>| -> Controller<'_> {
+        match s {
+            None => Controller::Random,
+            Some(d) => {
+                let evaluator: &dyn Evaluator = if d.evaluator == EvaluatorKind::Network { net.as_ref().expect("net") } else { &rollout };
+                Controller::Search { difficulty: d.clone(), evaluator }
+            }
+        }
+    };
+    let (ca, cb) = (ctl(&a), ctl(&b));
+    let stats = py.detach(|| arena(&ca, &cb, games, seed, threads));
+    let d = pyo3::types::PyDict::new(py);
+    d.set_item("games", stats.games)?;
+    d.set_item("first_wins", stats.a_wins)?;
+    d.set_item("second_wins", stats.b_wins)?;
+    d.set_item("draws", stats.draws)?;
+    d.set_item("total_rounds", stats.total_rounds)?;
+    d.set_item("elapsed_secs", stats.elapsed_secs)?;
+    Ok(d)
+}
+
+fn pack_samples<'py>(py: Python<'py>, samples: Vec<Sample>, stats: SelfPlayStats, batching: Option<(u64, u64)>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let n = samples.len();
     let mut features = Vec::with_capacity(n * encode::FEATURE_LEN);
     let mut policy = Vec::with_capacity(n * encode::ACTION_SPACE);
@@ -156,6 +250,10 @@ fn self_play_rollout<'py>(
     st.set_item("draws", stats.draws)?;
     st.set_item("total_rounds", stats.total_rounds)?;
     st.set_item("elapsed_secs", stats.elapsed_secs)?;
+    if let Some((requests, batches)) = batching {
+        st.set_item("requests", requests)?;
+        st.set_item("batches", batches)?;
+    }
     d.set_item("stats", st)?;
     Ok(d)
 }
@@ -164,6 +262,8 @@ fn self_play_rollout<'py>(
 fn emergent_tactics(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGame>()?;
     m.add_function(wrap_pyfunction!(self_play_rollout, m)?)?;
+    m.add_function(wrap_pyfunction!(self_play_network, m)?)?;
+    m.add_function(wrap_pyfunction!(arena_match, m)?)?;
     m.add("FEATURE_LEN", encode::FEATURE_LEN)?;
     m.add("ACTION_SPACE", encode::ACTION_SPACE)?;
     m.add("ACTION_NAMES", action_names())?;

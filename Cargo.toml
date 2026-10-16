@@ -4,6 +4,7 @@ members = [
     "crates/et-engine",
     "crates/et-search",
     "crates/et-protocol",
+    "crates/et-model",
     "crates/et-inference",
     "crates/et-server",
     "crates/et-cli",
@@ -21,6 +22,7 @@ authors = ["Charles Feduke <charles.feduke@gmail.com>"]
 et-engine = { path = "crates/et-engine" }
 et-search = { path = "crates/et-search" }
 et-protocol = { path = "crates/et-protocol" }
+et-model = { path = "crates/et-model" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

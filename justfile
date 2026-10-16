@@ -17,9 +17,9 @@ test:
 py-dev:
     cd training && uv sync --group dev --reinstall-package emergent-tactics
 
-# Run the gRPC inference service (optionally with a model)
-inference model="":
-    RUST_LOG=info cargo run -p et-inference -- {{ if model != "" { "--model " + model } else { "" } }}
+# Run the gRPC inference service with an exported model
+inference model="models/gen1.onnx":
+    RUST_LOG=info cargo run --release -p et-inference -- --model {{model}}
 
 # Run the game server
 serve:
@@ -29,9 +29,9 @@ serve:
 web:
     cd web && npm run dev
 
-# Headless AI-vs-AI games
-arena games="10":
-    cargo run -p et-cli -- arena --games {{games}}
+# Headless games between two controllers (random, novice, net-adept, ...)
+arena first="net-adept" second="adept" games="100" model="models/gen1.onnx":
+    cargo run --release -p et-cli -- arena --first {{first}} --second {{second}} --games {{games}} --model {{model}}
 
 # Training stages
 selfplay config="configs/baseline.yaml":
@@ -42,3 +42,14 @@ train config="configs/baseline.yaml":
 
 export config="configs/baseline.yaml":
     cd training && uv run et-export --config {{config}}
+
+# Rank presets with the newest exported model
+arena-stage config="configs/baseline.yaml":
+    cd training && uv run et-arena --config {{config}}
+
+# One full generation with the newest model: self-play, train, export, arena
+generation config="configs/baseline.yaml":
+    cd training && uv run et-selfplay --config {{config}} --evaluator network --model latest
+    cd training && uv run et-train --config {{config}}
+    cd training && uv run et-export --config {{config}}
+    cd training && uv run et-arena --config {{config}}

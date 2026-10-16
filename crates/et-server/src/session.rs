@@ -5,7 +5,9 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket};
 use et_engine::{Action, GameState, Outcome, Player, PublicEntity, StatusKind};
 use et_protocol::ws::{ArchetypeInfo, CandidateInfo, CardInfo, ClientMessage, ServerMessage, StatChange, StatusInfo};
-use et_search::{Difficulty, Evaluator, RolloutEvaluator, SearchResult, search};
+use et_search::{Difficulty, Evaluator, EvaluatorKind, RolloutEvaluator, SearchResult, search};
+
+use crate::grpc_eval::GrpcEvaluator;
 use futures_util::{SinkExt, StreamExt};
 use rand::{Rng, SeedableRng, seq::IndexedRandom};
 use rand_chacha::ChaCha8Rng;
@@ -138,7 +140,7 @@ pub async fn run(socket: WebSocket, app: Arc<AppState>) {
             }
         }
         if let Some(g) = game.as_mut() {
-            if !drive_ai(&mut sink, g, app.ai_delay_ms).await {
+            if !drive_ai(&mut sink, g, &app).await {
                 return;
             }
         }
@@ -179,7 +181,8 @@ async fn send_state(sink: &mut Sink, g: &Game) -> bool {
 }
 
 /// Keep taking AI turns until a human must act or the game ends.
-async fn drive_ai(sink: &mut Sink, g: &mut Game, delay_ms: u64) -> bool {
+async fn drive_ai(sink: &mut Sink, g: &mut Game, app: &AppState) -> bool {
+    let delay_ms = app.ai_delay_ms;
     while g.state.outcome().is_none() && g.human != Some(g.state.to_move) {
         let player = g.state.to_move;
         let controller = g.controller(player).clone();
@@ -195,9 +198,17 @@ async fn drive_ai(sink: &mut Sink, g: &mut Game, delay_ms: u64) -> bool {
             }
             Controller::Search(difficulty) => {
                 let (legal2, d2) = (legal.clone(), difficulty.clone());
+                let inference = if difficulty.evaluator == EvaluatorKind::Network { app.inference.clone() } else { None };
+                if difficulty.evaluator == EvaluatorKind::Network && inference.is_none() {
+                    tracing::warn!(preset = %difficulty.name, "no inference service; using rollouts");
+                }
+                let handle = tokio::runtime::Handle::current();
                 let result: SearchResult = tokio::task::spawn_blocking(move || {
                     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-                    let evaluator: Box<dyn Evaluator> = Box::new(RolloutEvaluator { max_depth: 60 });
+                    let evaluator: Box<dyn Evaluator> = match inference {
+                        Some(client) => Box::new(GrpcEvaluator::new(client, handle)),
+                        None => Box::new(RolloutEvaluator { max_depth: 60 }),
+                    };
                     search(&obs, &legal2, &d2, evaluator.as_ref(), &mut rng)
                 })
                 .await

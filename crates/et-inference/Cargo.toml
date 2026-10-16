@@ -9,6 +9,7 @@ authors.workspace = true
 
 [dependencies]
 et-protocol.workspace = true
+et-model.workspace = true
 tokio.workspace = true
 tonic.workspace = true
 tracing.workspace = true

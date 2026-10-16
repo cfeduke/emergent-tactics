@@ -9,6 +9,8 @@ authors.workspace = true
 
 [dependencies]
 et-engine.workspace = true
+et-model.workspace = true
+anyhow.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 serde.workspace = true

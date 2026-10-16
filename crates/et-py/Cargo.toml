@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 et-engine.workspace = true
 et-search.workspace = true
+et-model.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 serde_json.workspace = true

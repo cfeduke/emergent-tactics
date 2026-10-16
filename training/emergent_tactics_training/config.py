@@ -37,6 +37,21 @@ class Config:
     def train(self) -> dict[str, Any]:
         return dict(self.raw.get("train", {}))
 
+    @property
+    def arena(self) -> dict[str, Any]:
+        return dict(self.raw.get("arena", {}))
+
+    def resolve_model(self, name: str | None) -> Path:
+        """'latest' picks the newest .onnx in models_dir; otherwise a path
+        relative to training/."""
+        if name in (None, "latest"):
+            onnx = sorted(self.models_dir.glob("*.onnx"), key=lambda p: p.stat().st_mtime)
+            if not onnx:
+                raise SystemExit(f"no .onnx models in {self.models_dir}; run et-export first")
+            return onnx[-1]
+        p = Path(name)
+        return p if p.is_absolute() else (self.root / p).resolve()
+
 
 def load(path: str | os.PathLike[str]) -> Config:
     p = Path(path).resolve()

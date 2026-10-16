@@ -7,7 +7,7 @@ use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{Difficulty, Evaluator, search};
+use crate::{Difficulty, Evaluator, EvaluatorKind, search};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelfPlayConfig {
@@ -102,6 +102,7 @@ fn play_one(config: &SelfPlayConfig, game: u32, evaluator: &dyn Evaluator) -> (V
             temperature,
             exploration: config.exploration,
             root_noise: config.root_noise,
+            evaluator: EvaluatorKind::Rollout,
         };
         let result = search(&obs, &legal, &difficulty, evaluator, &mut rng);
 

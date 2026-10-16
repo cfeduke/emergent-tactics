@@ -25,6 +25,7 @@ web (SvelteKit) --JSON/WebSocket--> et-server --gRPC--> et-inference (ONNX)
 | `crates/et-engine` | Pure game rules, observations, and the feature encoder. Single source of truth. |
 | `crates/et-search` | ISMCTS with a pluggable `Evaluator` (random rollouts or network). Difficulty presets. |
 | `crates/et-protocol` | JSON message types for the web client, gRPC service definition for inference. |
+| `crates/et-model` | ONNX model loading, metadata checks, and a batching thread that merges leaf evaluations from many searches into one model call. |
 | `crates/et-inference` | Game-agnostic gRPC service that evaluates feature batches with an ONNX model. |
 | `crates/et-server` | Game sessions over WebSocket; drives the search for AI turns. |
 | `crates/et-cli` | Headless arena, benchmarks, and calibration. |
@@ -72,7 +73,10 @@ All stages read `training/configs/baseline.yaml` and run from `training/`.
 1. `uv run et-selfplay` plays games in parallel in Rust (all cores, GIL
    released) with ISMCTS on both sides and writes
    `data/gen<N>/samples.npz`: encoded observations, root visit
-   distributions, legal masks and game results.
+   distributions, legal masks and game results. Generation 1 uses random
+   rollouts (`--evaluator rollout`); later generations use the newest
+   exported model (`--evaluator network --model latest`), with leaf
+   evaluations batched across all worker threads.
 2. `uv run et-train` fits the policy/value network on the most recent
    generations. `train.device` selects `cpu`, `mps` (Metal) or `auto`.
    Writes `models/gen<N>.pt`.
@@ -81,8 +85,10 @@ All stages read `training/configs/baseline.yaml` and run from `training/`.
    matches PyTorch.
 4. `cargo run -p et-inference -- --model models/gen<N>.onnx` serves it;
    `cargo run -p et-server` refuses a model whose fingerprint differs.
-5. Repeat with the network as evaluator. Each generation is a checkpoint;
-   the arena ranks them and maps them to difficulty presets.
+5. `uv run et-arena` ranks presets with the newest model. Presets come in
+   pairs at equal search budget, `adept` (rollouts) and `net-adept`
+   (network), so the value of the trained evaluator is measured directly.
+6. Repeat. `just generation` runs one full loop.
 
 Every generation directory and checkpoint records the library fingerprint,
 and each stage refuses inputs produced against a different library.
