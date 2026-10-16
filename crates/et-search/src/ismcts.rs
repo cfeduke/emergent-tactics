@@ -1,4 +1,5 @@
 use et_engine::{Action, Observation};
+use rand::seq::IndexedRandom;
 
 use crate::{Difficulty, Evaluator};
 
@@ -15,19 +16,21 @@ pub struct SearchResult {
 }
 
 /// Run ISMCTS from `obs` and return the chosen action with visit statistics.
-pub fn search(obs: &Observation, legal: &[Action], difficulty: &Difficulty, evaluator: &dyn Evaluator) -> SearchResult {
-    let eval = evaluator.evaluate(obs, legal);
+///
+/// Placeholder: samples an action from the evaluator's priors. The real
+/// tree search replaces this.
+pub fn search(obs: &Observation, legal: &[Action], difficulty: &Difficulty, evaluator: &dyn Evaluator, rng: &mut dyn rand::RngCore) -> SearchResult {
+    let eval = evaluator.evaluate(obs, legal, rng);
     let action = eval
         .priors
-        .iter()
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(a, _)| a.clone())
-        .unwrap_or(Action::Pass);
+        .choose_weighted(rng, |(_, p)| *p)
+        .map(|(a, _)| *a)
+        .unwrap_or(Action::EndTurn);
     SearchResult {
         action,
         stats: SearchStats {
             iterations: difficulty.iterations,
-            visits: legal.iter().map(|a| (a.clone(), 0)).collect(),
+            visits: legal.iter().map(|a| (*a, 0)).collect(),
         },
     }
 }

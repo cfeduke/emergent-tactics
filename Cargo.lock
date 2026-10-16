@@ -295,6 +295,8 @@ dependencies = [
  "clap",
  "et-engine",
  "et-search",
+ "rand",
+ "rand_chacha",
 ]
 
 [[package]]
@@ -341,6 +343,9 @@ dependencies = [
  "et-engine",
  "et-search",
  "pyo3",
+ "rand",
+ "rand_chacha",
+ "serde_json",
 ]
 
 [[package]]
