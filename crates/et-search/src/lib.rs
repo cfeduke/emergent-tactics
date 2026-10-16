@@ -8,7 +8,9 @@
 pub mod difficulty;
 pub mod evaluator;
 pub mod ismcts;
+pub mod selfplay;
 
 pub use difficulty::Difficulty;
 pub use evaluator::{Evaluation, Evaluator, RolloutEvaluator};
 pub use ismcts::{Candidate, SearchResult, SearchStats, search};
+pub use selfplay::{Sample, SelfPlayConfig, SelfPlayStats, self_play};

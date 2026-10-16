@@ -3,7 +3,8 @@
 //! duplicated in Python.
 
 use et_engine::{GameState, Outcome, Player, encode};
-use et_search::{Difficulty, RolloutEvaluator, search};
+use et_search::{Difficulty, RolloutEvaluator, SelfPlayConfig, search, self_play};
+use pyo3::types::PyBytes;
 use pyo3::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -72,7 +73,7 @@ impl PyGame {
     #[pyo3(signature = (iterations = 200, determinizations = 10, exploration = 1.4, temperature = 1.0, rollout_depth = 60))]
     #[allow(clippy::type_complexity)]
     fn search(&mut self, iterations: u32, determinizations: u32, exploration: f32, temperature: f32, rollout_depth: u32) -> (usize, f32, Vec<(usize, f32, u32, f32)>) {
-        let d = Difficulty { name: "py".into(), iterations, determinizations, temperature, exploration };
+        let d = Difficulty { name: "py".into(), iterations, determinizations, temperature, exploration, root_noise: None };
         let obs = self.state.observe(self.state.to_move);
         let legal = self.state.legal_actions();
         let res = search(&obs, &legal, &d, &RolloutEvaluator { max_depth: rollout_depth }, &mut self.rng);
@@ -85,9 +86,84 @@ impl PyGame {
     }
 }
 
+fn f32_bytes<'py>(py: Python<'py>, v: &[f32]) -> Bound<'py, PyBytes> {
+    let mut out = Vec::with_capacity(v.len() * 4);
+    for x in v {
+        out.extend_from_slice(&x.to_le_bytes());
+    }
+    PyBytes::new(py, &out)
+}
+
+/// Play games in parallel with rollout-evaluated ISMCTS on both sides and
+/// return training samples as little-endian float32 buffers:
+/// features (n × FEATURE_LEN), policy (n × ACTION_SPACE), legal mask
+/// (n × ACTION_SPACE), value (n), plus per-sample (player, game, turn) and
+/// a stats dict. The GIL is released while playing.
+#[pyfunction]
+#[pyo3(signature = (games, seed = 0, iterations = 200, determinizations = 10, exploration = 1.4, temperature = 1.0, temperature_turns = 1000, root_noise_alpha = 0.5, root_noise_weight = 0.25, rollout_depth = 60, threads = 0))]
+#[allow(clippy::too_many_arguments)]
+fn self_play_rollout<'py>(
+    py: Python<'py>,
+    games: u32,
+    seed: u64,
+    iterations: u32,
+    determinizations: u32,
+    exploration: f32,
+    temperature: f32,
+    temperature_turns: u32,
+    root_noise_alpha: f32,
+    root_noise_weight: f32,
+    rollout_depth: u32,
+    threads: usize,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let config = SelfPlayConfig {
+        games,
+        seed,
+        iterations,
+        determinizations,
+        exploration,
+        temperature,
+        temperature_turns,
+        root_noise: if root_noise_weight > 0.0 { Some((root_noise_alpha, root_noise_weight)) } else { None },
+        threads,
+    };
+    let (samples, stats) = py.detach(|| self_play(&config, || RolloutEvaluator { max_depth: rollout_depth }));
+    let n = samples.len();
+    let mut features = Vec::with_capacity(n * encode::FEATURE_LEN);
+    let mut policy = Vec::with_capacity(n * encode::ACTION_SPACE);
+    let mut legal = Vec::with_capacity(n * encode::ACTION_SPACE);
+    let mut value = Vec::with_capacity(n);
+    let mut meta: Vec<(u8, u32, u32)> = Vec::with_capacity(n);
+    for s in &samples {
+        features.extend_from_slice(&s.features);
+        policy.extend_from_slice(&s.policy);
+        legal.extend_from_slice(&s.legal);
+        value.push(s.value);
+        meta.push((s.player.index() as u8, s.game, s.turn));
+    }
+    let d = pyo3::types::PyDict::new(py);
+    d.set_item("n", n)?;
+    d.set_item("features", f32_bytes(py, &features))?;
+    d.set_item("policy", f32_bytes(py, &policy))?;
+    d.set_item("legal", f32_bytes(py, &legal))?;
+    d.set_item("value", f32_bytes(py, &value))?;
+    d.set_item("meta", meta)?;
+    let st = pyo3::types::PyDict::new(py);
+    st.set_item("games", stats.games)?;
+    st.set_item("samples", stats.samples)?;
+    st.set_item("first_wins", stats.first_wins)?;
+    st.set_item("second_wins", stats.second_wins)?;
+    st.set_item("draws", stats.draws)?;
+    st.set_item("total_rounds", stats.total_rounds)?;
+    st.set_item("elapsed_secs", stats.elapsed_secs)?;
+    d.set_item("stats", st)?;
+    Ok(d)
+}
+
 #[pymodule]
 fn emergent_tactics(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGame>()?;
+    m.add_function(wrap_pyfunction!(self_play_rollout, m)?)?;
     m.add("FEATURE_LEN", encode::FEATURE_LEN)?;
     m.add("ACTION_SPACE", encode::ACTION_SPACE)?;
     m.add("ACTION_NAMES", action_names())?;

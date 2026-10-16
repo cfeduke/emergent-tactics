@@ -109,7 +109,16 @@ pub fn search(obs: &Observation, legal: &[Action], difficulty: &Difficulty, eval
 
     // Root expansion uses the real observation and the real legal set.
     let root_eval = evaluator.evaluate(obs, legal, rng);
-    tree.nodes[0].children = root_eval.priors.iter().map(|(a, p)| Child { action: *a, prior: *p, available: 0, node: None }).collect();
+    let mut root_priors: Vec<f32> = root_eval.priors.iter().map(|(_, p)| *p).collect();
+    if let Some((alpha, weight)) = difficulty.root_noise
+        && root_priors.len() > 1
+    {
+        let noise = dirichlet(alpha, root_priors.len(), rng);
+        for (p, n) in root_priors.iter_mut().zip(noise) {
+            *p = (1.0 - weight) * *p + weight * n;
+        }
+    }
+    tree.nodes[0].children = root_eval.priors.iter().zip(root_priors).map(|((a, _), p)| Child { action: *a, prior: p, available: 0, node: None }).collect();
     tree.nodes[0].expanded = true;
 
     // A fixed set of determinizations, cycled round-robin.
@@ -222,6 +231,20 @@ fn select(tree: &mut Tree, node: NodeId, legal: &[Action], c_puct: f32) -> Actio
     best.expect("at least one legal child").1
 }
 
+/// Dirichlet(alpha) sample via normalised Gamma draws.
+fn dirichlet(alpha: f32, n: usize, rng: &mut dyn rand::RngCore) -> Vec<f32> {
+    use rand_distr::{Distribution, Gamma};
+    let g = Gamma::new(alpha as f64, 1.0).expect("alpha > 0");
+    let mut v: Vec<f32> = (0..n).map(|_| g.sample(rng) as f32).collect();
+    let sum: f32 = v.iter().sum();
+    if sum > 0.0 {
+        for x in &mut v {
+            *x /= sum;
+        }
+    }
+    v
+}
+
 /// Sample from visit counts raised to 1/temperature; temperature 0 is argmax.
 fn choose(candidates: &[Candidate], temperature: f32, rng: &mut dyn rand::RngCore) -> Option<Action> {
     if candidates.is_empty() {
@@ -261,7 +284,7 @@ mod tests {
         }
         let obs = s.observe(s.to_move);
         let legal = s.legal_actions();
-        let d = Difficulty { name: "t".into(), iterations: 300, determinizations: 10, temperature: 0.0, exploration: 1.4 };
+        let d = Difficulty { name: "t".into(), iterations: 300, determinizations: 10, temperature: 0.0, exploration: 1.4, root_noise: None };
         let res = search(&obs, &legal, &d, &RolloutEvaluator { max_depth: 40 }, &mut r);
         assert_eq!(res.action, Action::Play(CardKind::Strike), "{:?}", res.stats.candidates);
         let strike = res.stats.candidates.iter().find(|c| c.action == Action::Play(CardKind::Strike)).unwrap();
@@ -273,7 +296,7 @@ mod tests {
         let mut r = ChaCha8Rng::seed_from_u64(2);
         let s = GameState::new(&mut r);
         let obs = s.observe(s.to_move);
-        let d = Difficulty { name: "t".into(), iterations: 100, determinizations: 4, temperature: 1.0, exploration: 1.4 };
+        let d = Difficulty { name: "t".into(), iterations: 100, determinizations: 4, temperature: 1.0, exploration: 1.4, root_noise: Some((0.5, 0.25)) };
         let res = search(&obs, &s.legal_actions(), &d, &RolloutEvaluator { max_depth: 40 }, &mut r);
         let total: u32 = res.stats.candidates.iter().map(|c| c.visits).sum();
         assert_eq!(total, 100);

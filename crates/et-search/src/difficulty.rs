@@ -11,14 +11,18 @@ pub struct Difficulty {
     /// Sampling temperature over final visit counts. 0 = argmax.
     pub temperature: f32,
     pub exploration: f32,
+    /// Dirichlet noise mixed into the root priors: (alpha, weight). Used by
+    /// self-play for exploration; presets leave it off.
+    #[serde(default)]
+    pub root_noise: Option<(f32, f32)>,
 }
 
 impl Difficulty {
     pub fn presets() -> Vec<Difficulty> {
         vec![
-            Difficulty { name: "novice".into(), iterations: 50, determinizations: 5, temperature: 1.0, exploration: 1.4 },
-            Difficulty { name: "adept".into(), iterations: 400, determinizations: 20, temperature: 0.5, exploration: 1.4 },
-            Difficulty { name: "master".into(), iterations: 2000, determinizations: 50, temperature: 0.0, exploration: 1.4 },
+            Difficulty { name: "novice".into(), iterations: 50, determinizations: 5, temperature: 1.0, exploration: 1.4, root_noise: None },
+            Difficulty { name: "adept".into(), iterations: 400, determinizations: 20, temperature: 0.5, exploration: 1.4, root_noise: None },
+            Difficulty { name: "master".into(), iterations: 2000, determinizations: 50, temperature: 0.0, exploration: 1.4, root_noise: None },
         ]
     }
 

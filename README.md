@@ -67,12 +67,25 @@ summary of what each action changed.
 
 ## Training loop
 
-1. `just selfplay` generates samples using ISMCTS with rollout evaluation.
-2. `just train` fits the policy/value network.
-3. `just export` writes an ONNX checkpoint to `models/`.
-4. `just inference models/<ckpt>.onnx` serves it; `just serve` and `just web` to play.
-5. Repeat with the network as evaluator. Each generation is a checkpoint; the
-   arena stage ranks them and maps them to difficulty presets.
+All stages read `training/configs/baseline.yaml` and run from `training/`.
+
+1. `uv run et-selfplay` plays games in parallel in Rust (all cores, GIL
+   released) with ISMCTS on both sides and writes
+   `data/gen<N>/samples.npz`: encoded observations, root visit
+   distributions, legal masks and game results.
+2. `uv run et-train` fits the policy/value network on the most recent
+   generations. `train.device` selects `cpu`, `mps` (Metal) or `auto`.
+   Writes `models/gen<N>.pt`.
+3. `uv run et-export` writes `models/gen<N>.onnx` with the library
+   fingerprint and dimensions in the ONNX metadata, and checks ONNX Runtime
+   matches PyTorch.
+4. `cargo run -p et-inference -- --model models/gen<N>.onnx` serves it;
+   `cargo run -p et-server` refuses a model whose fingerprint differs.
+5. Repeat with the network as evaluator. Each generation is a checkpoint;
+   the arena ranks them and maps them to difficulty presets.
+
+Every generation directory and checkpoint records the library fingerprint,
+and each stage refuses inputs produced against a different library.
 
 ## License
 

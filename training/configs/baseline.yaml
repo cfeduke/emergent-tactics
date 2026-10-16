@@ -1,12 +1,33 @@
-# First-generation experiment: tiny network, rollout-seeded self-play.
+# Generation-1 experiment: rollout-evaluated self-play, small network.
+# Paths are relative to the training/ directory.
+data_dir: data
+models_dir: ../models
+
+selfplay:
+  games: 2000
+  seed: 1
+  iterations: 200
+  determinizations: 10
+  exploration: 1.4
+  temperature: 1.0
+  temperature_turns: 6     # entity turns played at temperature; then greedy
+  root_noise_alpha: 0.5
+  root_noise_weight: 0.25
+  rollout_depth: 60
+  threads: 0               # 0 = all cores
+
 model:
   width: 128
   depth: 2
-selfplay:
-  games: 1000
-  iterations: 200
-  determinizations: 10
+
 train:
-  epochs: 10
-  batch_size: 256
+  generations: 1           # how many most-recent generations to train on
+  device: auto             # auto | cpu | mps
+  threads: 0               # CPU threads for torch; 0 = all cores
+  epochs: 20
+  batch_size: 512
   lr: 1.0e-3
+  weight_decay: 1.0e-4
+  value_weight: 1.0
+  val_fraction: 0.1
+  seed: 0
