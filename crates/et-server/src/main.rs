@@ -19,21 +19,21 @@ struct Args {
     listen: String,
     #[arg(long, default_value = "http://127.0.0.1:50051")]
     inference: String,
-    /// Pause between AI moves in spectated games, so they are watchable.
+    /// Pause after each AI move so the client can show the play.
     #[arg(long, default_value_t = 700)]
-    spectate_delay_ms: u64,
+    ai_delay_ms: u64,
 }
 
 #[derive(Clone)]
 pub struct AppState {
-    pub spectate_delay_ms: u64,
+    pub ai_delay_ms: u64,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
     let args = Args::parse();
-    let state = Arc::new(AppState { spectate_delay_ms: args.spectate_delay_ms });
+    let state = Arc::new(AppState { ai_delay_ms: args.ai_delay_ms });
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/ws", get(ws_handler))

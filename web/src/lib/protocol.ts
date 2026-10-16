@@ -54,6 +54,13 @@ export interface CandidateInfo {
 	value: number;
 }
 
+export interface StatChange {
+	player: Player;
+	stat: 'life' | 'block' | 'vulnerable' | 'resource' | 'stand_ground' | 'fury' | string;
+	before: number;
+	after: number;
+}
+
 export type ClientMessage =
 	| { type: 'new_game'; difficulty: string; seat: Player }
 	| { type: 'spectate'; first: string; second: string }
@@ -72,7 +79,7 @@ export type ServerMessage =
 			candidates: CandidateInfo[];
 			chosen: Action;
 	  }
-	| { type: 'acted'; player: Player; action: Action; summary: string[] }
+	| { type: 'acted'; player: Player; action: Action; changes: StatChange[]; summary: string[] }
 	| { type: 'game_over'; outcome: Outcome }
 	| { type: 'error'; message: string };
 

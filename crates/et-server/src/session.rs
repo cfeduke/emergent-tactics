@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
 use et_engine::{Action, GameState, Outcome, Player, PublicEntity};
-use et_protocol::ws::{CandidateInfo, CardInfo, ClientMessage, ServerMessage};
+use et_protocol::ws::{CandidateInfo, CardInfo, ClientMessage, ServerMessage, StatChange};
 use et_search::{Difficulty, Evaluator, RolloutEvaluator, SearchResult, search};
 use futures_util::{SinkExt, StreamExt};
 use rand::{Rng, SeedableRng, seq::IndexedRandom};
@@ -121,8 +121,8 @@ pub async fn run(socket: WebSocket, app: Arc<AppState>) {
                 let player = g.state.to_move;
                 let before = g.state.clone();
                 g.state.apply(&action, &mut g.rng);
-                let summary = summarize(&before, &g.state, player, &action, g.human);
-                if !send(&mut sink, &ServerMessage::Acted { player, action, summary }).await {
+                let (changes, summary) = summarize(&before, &g.state, player, &action, g.human);
+                if !send(&mut sink, &ServerMessage::Acted { player, action, changes, summary }).await {
                     return;
                 }
                 if !send_state(&mut sink, g).await {
@@ -131,7 +131,7 @@ pub async fn run(socket: WebSocket, app: Arc<AppState>) {
             }
         }
         if let Some(g) = game.as_mut() {
-            if !drive_ai(&mut sink, g, app.spectate_delay_ms).await {
+            if !drive_ai(&mut sink, g, app.ai_delay_ms).await {
                 return;
             }
         }
@@ -220,24 +220,25 @@ async fn drive_ai(sink: &mut Sink, g: &mut Game, delay_ms: u64) -> bool {
         }
         let before = g.state.clone();
         g.state.apply(&action, &mut g.rng);
-        let summary = summarize(&before, &g.state, player, &action, g.human);
-        if !send(sink, &ServerMessage::Acted { player, action, summary }).await {
+        let (changes, summary) = summarize(&before, &g.state, player, &action, g.human);
+        if !send(sink, &ServerMessage::Acted { player, action, changes, summary }).await {
             return false;
         }
         if !send_state(sink, g).await {
             return false;
         }
-        if g.human.is_none() && g.state.outcome().is_none() {
+        // Pace AI moves so the client can show each play.
+        if g.state.outcome().is_none() {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
         }
     }
     true
 }
 
-/// Human-readable account of what an action changed, from public state.
-/// Labels are relative to the human seat, or seat names when spectating.
-fn summarize(before: &GameState, after: &GameState, player: Player, action: &Action, human: Option<Player>) -> Vec<String> {
-    let mut out = Vec::new();
+/// Structured and human-readable accounts of what an action changed,
+/// from public state. Labels are relative to the human seat, or seat names
+/// when spectating.
+fn summarize(before: &GameState, after: &GameState, player: Player, action: &Action, human: Option<Player>) -> (Vec<StatChange>, Vec<String>) {
     let who = |p: Player| match human {
         Some(h) if h == p => "you",
         Some(_) => "opponent",
@@ -246,38 +247,34 @@ fn summarize(before: &GameState, after: &GameState, player: Player, action: &Act
             Player::Second => "Second",
         },
     };
-    match action {
-        Action::Play(k) => out.push(format!("{} played {}", who(player), k.def().name)),
-        Action::EndTurn => out.push(format!("{} ended the turn", who(player))),
-    }
+    let mut changes = Vec::new();
+    let mut lines = vec![match action {
+        Action::Play(k) => format!("{} played {}", who(player), k.def().name),
+        Action::EndTurn => format!("{} ended the turn", who(player)),
+    }];
     for p in [Player::First, Player::Second] {
-        let (b, a) = (before.entity(p), after.entity(p));
-        let (bp, ap) = (PublicEntity::of(b), PublicEntity::of(a));
+        let (b, a) = (PublicEntity::of(before.entity(p)), PublicEntity::of(after.entity(p)));
         let label = who(p);
-        if ap.lifepool != bp.lifepool {
-            out.push(format!("{label}: life {} -> {}", bp.lifepool, ap.lifepool));
-        }
-        if ap.block != bp.block {
-            out.push(format!("{label}: block {} -> {}", bp.block, ap.block));
-        }
-        if ap.vulnerable != bp.vulnerable {
-            out.push(format!("{label}: vulnerable {} -> {}", bp.vulnerable, ap.vulnerable));
-        }
-        if ap.fury && !bp.fury {
-            out.push(format!("{label}: Fury is now in play"));
-        }
-        if ap.stand_ground_pending != bp.stand_ground_pending {
-            out.push(format!("{label}: Stand Ground pending {} -> {}", bp.stand_ground_pending, ap.stand_ground_pending));
-        }
-        if matches!(action, Action::EndTurn) && ap.resource != bp.resource && after.to_move == p {
-            out.push(format!("{label}: new turn, resource {} (limit {} + bonus {})", ap.resource, ap.resource_limit, ap.resource_bonus));
+        let mut change = |stat: &str, bv: i32, av: i32| {
+            if bv != av {
+                changes.push(StatChange { player: p, stat: stat.into(), before: bv, after: av });
+                lines.push(format!("{label}: {stat} {bv} -> {av}"));
+            }
+        };
+        change("life", b.lifepool, a.lifepool);
+        change("block", b.block as i32, a.block as i32);
+        change("vulnerable", b.vulnerable as i32, a.vulnerable as i32);
+        change("stand_ground", b.stand_ground_pending as i32, a.stand_ground_pending as i32);
+        change("fury", b.fury as i32, a.fury as i32);
+        if matches!(action, Action::EndTurn) && after.to_move == p {
+            change("resource", b.resource as i32, a.resource as i32);
         }
     }
     if let Some(o) = after.outcome() {
-        out.push(match o {
+        lines.push(match o {
             Outcome::Win(w) => format!("{} wins", who(w)),
             Outcome::Draw => "draw".into(),
         });
     }
-    out
+    (changes, lines)
 }

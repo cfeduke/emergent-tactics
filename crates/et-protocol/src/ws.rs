@@ -46,6 +46,16 @@ pub struct CandidateInfo {
     pub value: f32,
 }
 
+/// One public attribute that an action changed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatChange {
+    pub player: Player,
+    /// One of: life, block, vulnerable, resource, stand_ground, fury.
+    pub stat: String,
+    pub before: i32,
+    pub after: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
@@ -64,9 +74,9 @@ pub enum ServerMessage {
         candidates: Vec<CandidateInfo>,
         chosen: Action,
     },
-    /// An action was applied. `summary` is a human-readable account of
-    /// what changed, derived from the public state before and after.
-    Acted { player: Player, action: Action, summary: Vec<String> },
+    /// An action was applied. `changes` lists the public attributes it
+    /// altered; `summary` is the same information as readable lines.
+    Acted { player: Player, action: Action, changes: Vec<StatChange>, summary: Vec<String> },
     GameOver { outcome: Outcome },
     Error { message: String },
 }

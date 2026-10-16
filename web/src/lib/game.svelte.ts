@@ -9,8 +9,17 @@ import type {
 	Observation,
 	Outcome,
 	Player,
-	ServerMessage
+	ServerMessage,
+	StatChange
 } from './protocol.js';
+
+/// The most recent action, shown in the play zone until the next one.
+export interface Play {
+	id: number;
+	player: Player;
+	action: Action;
+	changes: StatChange[];
+}
 
 export interface LogEntry {
 	id: number;
@@ -32,6 +41,7 @@ export class GameClient {
 	outcome = $state<Outcome | null>(null);
 	log = $state<LogEntry[]>([]);
 	thinking = $state(false);
+	play = $state<Play | null>(null);
 
 	#ws: WebSocket | null = null;
 	#nextId = 1;
@@ -74,6 +84,7 @@ export class GameClient {
 		this.outcome = null;
 		this.log = [];
 		this.thinking = false;
+		this.play = null;
 	}
 
 	#push(entry: Omit<LogEntry, 'id'>) {
@@ -110,6 +121,7 @@ export class GameClient {
 				});
 				break;
 			case 'acted':
+				this.play = { id: this.#nextId, player: msg.player, action: msg.action, changes: msg.changes };
 				this.#push({ kind: 'act', player: msg.player, title: msg.summary[0] ?? '', lines: msg.summary.slice(1) });
 				break;
 			case 'game_over':
